@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.18;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract GameSubscription is ERC20, Ownable {
+    enum SubscriptionLevel { BASIC, PREMIUM, VIP }
+
+    event SubscriptionRedeemed(address indexed account, SubscriptionLevel subscriptionLevel, uint256 subscriptionCost);
+    event RewardClaimed(address indexed account, uint256 rewardAmount);
+
+    mapping(address => SubscriptionLevel) public userSubscriptions;
+    mapping(address => uint256) public userRewards;
+
+    uint256 public constant Basic_level = 50;
+    uint256 public constant Premium_level = 100;
+    uint256 public constant VIP_level = 200;
+    uint256 public constant Reward_Per_Subscription = 50;
+
+    constructor(address initialOwner) ERC20("DEGEN", "DGN") Ownable(initialOwner) {}
+
+    modifier hasBalance(address account, uint256 amount) {
+        require(balanceOf(account) >= amount, "Insufficient funds");
+        _;
+    }
+
+    function mint(address to, uint256 total) public onlyOwner {
+        _mint(to, total);
+    }
+
+    function Burn(uint256 total) public {
+        require(total > 0, "Total to destroy must be greater than zero");
+        _burn(msg.sender, total);
+    }
+
+    function redeemSubscription(uint8 subscriptionNumber) public hasBalance(msg.sender, getSubscriptionCost(subscriptionNumber)) {
+        SubscriptionLevel subscription = SubscriptionLevel(subscriptionNumber - 1);
+        uint256 subscriptionCost = getSubscriptionCost(subscriptionNumber);
+        _burn(msg.sender, subscriptionCost);
+
+        userSubscriptions[msg.sender] = subscription;
+        emit SubscriptionRedeemed(msg.sender, subscription, subscriptionCost);
+
+        // Calculate reward without using SafeMath for multiplication
+        uint256 rewardAmount = subscriptionCost * Reward_Per_Subscription;
+        userRewards[msg.sender] += rewardAmount;
+        emit RewardClaimed(msg.sender, rewardAmount);
+    }
+
+    function claimRewards() public {
+        uint256 rewardAmount = userRewards[msg.sender];
+        require(rewardAmount > 0, "No rewards to claim");
+
+        userRewards[msg.sender] = 0;
+        _mint(msg.sender, rewardAmount);
+        emit RewardClaimed(msg.sender, rewardAmount);
+    }
+
+    function transferTokens(address user, uint256 total) external hasBalance(msg.sender, total) {
+        require(user != address(0), "Invalid user address provided");
+        _transfer(msg.sender, user, total);
+    }
+
+    function getSubscriptionCost(uint8 subscriptionNumber) public pure returns (uint256) {
+        require(subscriptionNumber >= 1 && subscriptionNumber <= 3, "Invalid subscription number");
+
+        if (subscriptionNumber == 1) {
+            return Basic_level;
+        } else if (subscriptionNumber == 2) {
+            return Premium_level;
+        } else {
+            return VIP_level;
+        }
+    }
+}
